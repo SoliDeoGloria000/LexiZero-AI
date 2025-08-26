@@ -92,10 +92,10 @@ class Gaddag:
         for move in moves:
             is_valid = self._can_make_move_with_rack(move, rack_str, board) # Check if valid
 
-            # --- ADD THIS IF-STATEMENT FOR DEBUGGING ---
+            # --- UNCOMMENT THIS IF-STATEMENT FOR DEBUGGING ---
             if not is_valid:
                 print(f"GADDAG FAILED VALIDATION: Move {move} for rack '{rack_str}'")
-            # --- END OF ADDED CODE ---
+            # --- END OF CODE TO UNCOMMENT ---
 
             if is_valid:
                 valid_moves.append(move)

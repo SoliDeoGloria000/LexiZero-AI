@@ -1,7 +1,8 @@
 import torch
 import numpy as np
-import random 
+import random
 from collections import defaultdict
+import logging
 
 # --- Project Imports ---
 # Make sure these imports match your project structure
@@ -12,6 +13,8 @@ from state_encoder import encode_state
 
 # --- Constants ---
 C_PUCT = 1.0
+
+logger = logging.getLogger(__name__)
 
 # --- THIS ENTIRE HELPER FUNCTION IS NEW ---
 def get_heuristic_score(move, board):
@@ -163,8 +166,21 @@ def pomcts_search(game: ScrabbleGame, network: LexiZeroNet, gaddag: Gaddag, num_
 
         # --- Step 1: Selection ---
         while not node.is_leaf():
-            action, node = node.select_child()
-            sim_game.play_move(action) # Update the simulation game state
+            # Select the next action and corresponding child node
+            action, next_node = node.select_child()
+            try:
+                # Attempt to apply the move to the simulation game state
+                sim_game.play_move(action)
+            except Exception:
+                # If the move is invalid (e.g., uses tiles not in rack),
+                # remove this child from consideration and retry selection.
+                del node.children[action]
+                if not node.children:
+                    # No valid moves remain from this node
+                    break
+                continue
+            # Move was successful; advance to the child node
+            node = next_node
             search_path.append(node)
 
         # --- Step 2: Expansion & Evaluation ---
@@ -185,7 +201,11 @@ def pomcts_search(game: ScrabbleGame, network: LexiZeroNet, gaddag: Gaddag, num_
 
             # --- THE LOGIC FROM THIS POINT FORWARD IS MODIFIED ---
             pruned_moves = prune_moves(legal_moves, determinized_world.board, top_k=50)
-            print(f"    [Leaf Expansion] Found {len(legal_moves)} moves, pruned to {len(pruned_moves)} for NN eval.")
+            logger.debug(
+                "    [Leaf Expansion] Found %d moves, pruned to %d for NN eval.",
+                len(legal_moves),
+                len(pruned_moves),
+            )
 
 
             if not pruned_moves:

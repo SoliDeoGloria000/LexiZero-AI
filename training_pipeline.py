@@ -36,7 +36,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 REPLAY_BUFFER_SIZE = 250000
 BATCH_SIZE = 64
 LEARNING_RATE = 0.001
-NUM_SIMULATIONS = 200  # Reduced for debugging
+NUM_SIMULATIONS = 20  # Reduced for faster debugging
 TURNS_UNTIL_GREEDY = 10
 NUM_EVAL_GAMES = 20
 WIN_RATE_THRESHOLD = 0.55
@@ -72,10 +72,19 @@ def run_self_play_game(network_weights):
 
         game = ScrabbleGame(player_names=["LexiZero_A", "LexiZero_B"], gaddag=worker_gaddag)
         game_history = []
-        
+
+        start_time = time.time()
+        TIMEOUT_SECONDS = 60
+
         # This loop now correctly wraps the game logic
         for turn_count in range(1, MAX_GAME_TURNS + 1):
-            
+            elapsed = time.time() - start_time
+            print(f"Worker {os.getpid()}: Turn {turn_count}, elapsed {elapsed:.1f}s")
+
+            if elapsed > TIMEOUT_SECONDS:
+                print(f"Worker {os.getpid()}: Timeout reached, ending game early.")
+                break
+
             if game.is_game_over():
                 break
 
@@ -90,6 +99,14 @@ def run_self_play_game(network_weights):
                 policy = {}
             
             if not policy:
+                # --- ADD THIS LOGGING BLOCK ---
+                player_name = game.get_current_player().name
+                rack_str = "".join(sorted([t.letter for t in game.get_current_player().rack]))
+                print(
+                    f"Worker {os.getpid()}: Turn {turn_count} | Player: {player_name} | "
+                    f"Rack: [{rack_str}] | No suitable moves found. Passing turn."
+                )
+                # --- END OF ADDED BLOCK ---
                 game.pass_turn()
                 continue
 
@@ -108,6 +125,16 @@ def run_self_play_game(network_weights):
             chosen_index = np.random.choice(len(moves), p=probabilities)
             move_to_play = moves[chosen_index]
             
+            # --- ADD THIS LOGGING BLOCK ---
+            player = game.get_current_player()
+            rack_str = "".join(sorted([t.letter for t in player.rack]))
+            print(
+                f"Worker {os.getpid()}: Turn {turn_count} | Player: {player.name} | "
+                f"Rack: [{rack_str}] | Chosen Move: {move_to_play} | "
+                f"Score: {player.score}"
+            )
+            
+
             try:
                 game.play_move(move_to_play)
             except Exception as e:
