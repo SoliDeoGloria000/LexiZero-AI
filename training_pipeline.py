@@ -335,9 +335,21 @@ def evaluate_networks(challenger_net, best_net, gaddag, device):
         # REMOVED device parameter
         worker_args.append((p1_weights, p2_weights, p1_name, p2_name))
 
-    # Run the evaluation games in parallel
-    with mp.Pool(NUM_WORKERS, initializer=init_worker, initargs=(gaddag.dictionary_path,)) as pool:
-        results = list(tqdm(pool.starmap(run_evaluation_game, worker_args), total=NUM_EVAL_GAMES, desc="Evaluating Networks"))
+    # Run the evaluation games
+    if NUM_WORKERS > 1:
+        with mp.Pool(NUM_WORKERS, initializer=init_worker, initargs=(gaddag.dictionary_path,)) as pool:
+            results = list(
+                tqdm(
+                    pool.starmap(run_evaluation_game, worker_args),
+                    total=NUM_EVAL_GAMES,
+                    desc="Evaluating Networks",
+                )
+            )
+    else:
+        init_worker(gaddag.dictionary_path)
+        results = []
+        for args in tqdm(worker_args, total=NUM_EVAL_GAMES, desc="Evaluating Networks"):
+            results.append(run_evaluation_game(*args))
 
     # Count the wins for the challenger
     challenger_wins = results.count("Challenger")
@@ -408,9 +420,22 @@ def main():
 
         print(f"Starting {GAMES_PER_GENERATION} self-play games with {NUM_WORKERS} workers...")
         start_time = time.time()
-        
-        with mp.Pool(NUM_WORKERS, initializer=init_worker, initargs=(dictionary_path,)) as pool:
-            results = list(tqdm(pool.starmap(run_self_play_game, worker_args), total=GAMES_PER_GENERATION, desc="Self-play games"))
+
+        if NUM_WORKERS > 1:
+            with mp.Pool(NUM_WORKERS, initializer=init_worker, initargs=(dictionary_path,)) as pool:
+                results = list(
+                    tqdm(
+                        pool.starmap(run_self_play_game, worker_args),
+                        total=GAMES_PER_GENERATION,
+                        desc="Self-play games",
+                    )
+                )
+        else:
+            # Fallback to sequential execution to avoid multiprocessing overhead
+            init_worker(dictionary_path)
+            results = []
+            for args in tqdm(worker_args, total=GAMES_PER_GENERATION, desc="Self-play games"):
+                results.append(run_self_play_game(*args))
 
         end_time = time.time()
         print(f"Self-play completed in {end_time - start_time:.2f} seconds")
