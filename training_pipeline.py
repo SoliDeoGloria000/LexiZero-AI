@@ -401,7 +401,7 @@ def main():
         network_weights = best_network.state_dict()
         best_network.to(device)
 
-        GAMES_PER_GENERATION = 4  # Reduced for debugging
+        GAMES_PER_GENERATION = 1  # Reduced for debugging
 
         # Prepare the arguments for each worker process (REMOVED device parameter)
         worker_args = [(network_weights,) for _ in range(GAMES_PER_GENERATION)]
