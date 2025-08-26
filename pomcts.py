@@ -13,6 +13,7 @@ from state_encoder import encode_state
 
 # --- Constants ---
 C_PUCT = 1.0
+MAX_LEGAL_MOVES = 500
 
 logger = logging.getLogger(__name__)
 
@@ -192,7 +193,7 @@ def pomcts_search(game: ScrabbleGame, network: LexiZeroNet, gaddag: Gaddag, num_
             
             rack = determinized_world.get_current_player().rack
             board = determinized_world.board
-            legal_moves = gaddag.find_moves(rack, board)
+            legal_moves = gaddag.find_moves(rack, board, max_moves=MAX_LEGAL_MOVES)
 
             if determinized_world.bag.get_remaining_count() >= len(rack):
                 rack_letters = "".join(sorted([tile.letter for tile in rack]))

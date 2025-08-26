@@ -181,7 +181,7 @@ class TestGaddag(unittest.TestCase):
     def test_find_moves_simple(self):
         """Test finding a simple word on an empty board."""
         rack = [Tile('C', 3), Tile('A', 1), Tile('R', 1), Tile('T', 1), Tile('X', 8)]
-        moves = self.gaddag.find_moves(rack, self.board)
+        moves = self.gaddag.find_moves(rack, self.board, max_moves=1000)
         
         found_words = {move[0] for move in moves}
         self.assertIn('CAT', found_words)

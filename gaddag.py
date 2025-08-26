@@ -65,47 +65,31 @@ class Gaddag:
                 node = node.children[char]
             node.is_terminal = True
 
-    def find_moves(self, rack, board):
+    def find_moves(self, rack, board, max_moves=None):
         """Finds all possible moves for a given rack and board state."""
         moves = set()
         anchors = self._find_anchors(board)
         rack_str = "".join([tile.letter for tile in rack])
-        
-        
+
         if not rack_str:
             return []
 
         for r, c in anchors:
-            initial_moves_count = len(moves)
-            
             # Generate moves extending from the anchor
-            self._gen(rack_str, self.root, [], board, r, c, True, moves, rack_str)  # Horizontal
-            self._gen(rack_str, self.root, [], board, r, c, False, moves, rack_str) # Vertical
-            
-            new_moves = len(moves) - initial_moves_count
-            
-        
-        
+            self._gen(rack_str, self.root, [], board, r, c, True, moves, rack_str, max_moves)  # Horizontal
+            if max_moves is not None and len(moves) >= max_moves:
+                break
+            self._gen(rack_str, self.root, [], board, r, c, False, moves, rack_str, max_moves) # Vertical
+            if max_moves is not None and len(moves) >= max_moves:
+                break
+
         # Final validation: ensure all returned moves can actually be made with the given rack
         valid_moves = []
-        invalid_count = 0
-        for move in moves:
-            is_valid = self._can_make_move_with_rack(move, rack_str, board) # Check if valid
-
-            # --- UNCOMMENT THIS IF-STATEMENT FOR DEBUGGING ---
-            if not is_valid:
-                print(f"GADDAG FAILED VALIDATION: Move {move} for rack '{rack_str}'")
-            # --- END OF CODE TO UNCOMMENT ---
-
-            if is_valid:
-                valid_moves.append(move)
-            else:
-                invalid_count += 1
-
-            valid_moves = []
         for move in moves:
             if self._can_make_move_with_rack(move, rack_str, board):
                 valid_moves.append(move)
+            if max_moves is not None and len(valid_moves) >= max_moves:
+                break
 
         return valid_moves
         
@@ -183,7 +167,7 @@ class Gaddag:
                     anchors.add((r, c))
         return list(anchors)
 
-    def _gen(self, rack, node, placed, board, r, c, is_horizontal, moves, original_rack):
+    def _gen(self, rack, node, placed, board, r, c, is_horizontal, moves, original_rack, max_moves):
         """
         Main move generation method, called for each anchor (r, c).
         This corrected version handles both forward-only and backward-then-forward moves.
@@ -195,13 +179,13 @@ class Gaddag:
         # Case 1: Generate moves that only extend forward from the anchor.
         # This corresponds to GADDAG paths that start with the BREAK_CHAR (e.g., '+WORD').
         if self.BREAK_CHAR in node.children:
-            self._extend_forward(rack, node.children[self.BREAK_CHAR], [], (r, c), board, is_horizontal, moves, original_rack)
+            self._extend_forward(rack, node.children[self.BREAK_CHAR], [], (r, c), board, is_horizontal, moves, original_rack, max_moves)
         
         # Case 2: Generate moves that extend backward from the anchor, then pivot and extend forward.
         # The current position and the anchor position start as the same.
-        self._extend_backward(rack, node, [], (r, c), (r, c), board, is_horizontal, moves, original_rack)
+        self._extend_backward(rack, node, [], (r, c), (r, c), board, is_horizontal, moves, original_rack, max_moves)
 
-    def _extend_backward(self, rack, node, placed, current_pos, anchor_pos, board, is_horizontal, moves, original_rack):
+    def _extend_backward(self, rack, node, placed, current_pos, anchor_pos, board, is_horizontal, moves, original_rack, max_moves):
         """
         Extends moves backward from the anchor, preserving the anchor's position.
         (This is the corrected version of the original _extend_from_position method).
@@ -211,9 +195,11 @@ class Gaddag:
         # If we find the break character, pivot and start extending forward FROM THE ANCHOR.
         if self.BREAK_CHAR in node.children:
             # This is the critical fix: the forward pass starts from the original `anchor_pos`.
-            self._extend_forward(rack, node.children[self.BREAK_CHAR], placed, anchor_pos, board, is_horizontal, moves, original_rack)
+            self._extend_forward(rack, node.children[self.BREAK_CHAR], placed, anchor_pos, board, is_horizontal, moves, original_rack, max_moves)
         
         # Try placing a tile from the rack at the current backward position
+        if max_moves is not None and len(moves) >= max_moves:
+            return
         if board.is_empty(r, c):
             for i in range(len(rack)):
                 letter = rack[i]
@@ -226,14 +212,14 @@ class Gaddag:
                             new_placed = placed + [(char, (r, c))]
                             next_pos = (r, c - 1) if is_horizontal else (r - 1, c)
                             if 0 <= next_pos[0] < board.size and 0 <= next_pos[1] < board.size:
-                                self._extend_backward(new_rack, node.children[char], new_placed, next_pos, anchor_pos, board, is_horizontal, moves, original_rack)
+                                self._extend_backward(new_rack, node.children[char], new_placed, next_pos, anchor_pos, board, is_horizontal, moves, original_rack, max_moves)
                 else:
                     if letter in node.children:
                         new_rack = rack[:i] + rack[i+1:]
                         new_placed = placed + [(letter, (r, c))]
                         next_pos = (r, c - 1) if is_horizontal else (r - 1, c)
                         if 0 <= next_pos[0] < board.size and 0 <= next_pos[1] < board.size:
-                            self._extend_backward(new_rack, node.children[letter], new_placed, next_pos, anchor_pos, board, is_horizontal, moves, original_rack)
+                            self._extend_backward(new_rack, node.children[letter], new_placed, next_pos, anchor_pos, board, is_horizontal, moves, original_rack, max_moves)
         
         # If there's an existing tile on the board, use it to continue building backward
         elif not board.is_empty(r, c):
@@ -241,31 +227,28 @@ class Gaddag:
             if existing_tile and existing_tile.letter in node.children:
                 next_pos = (r, c - 1) if is_horizontal else (r - 1, c)
                 if 0 <= next_pos[0] < board.size and 0 <= next_pos[1] < board.size:
-                    self._extend_backward(rack, node.children[existing_tile.letter], placed, next_pos, anchor_pos, board, is_horizontal, moves, original_rack)
+                    self._extend_backward(rack, node.children[existing_tile.letter], placed, next_pos, anchor_pos, board, is_horizontal, moves, original_rack, max_moves)
 
         
-        # If there's already a tile on the board, use it
-        elif not board.is_empty(r, c):
-            existing_tile = board.get_tile(r, c)
-            if existing_tile and existing_tile.letter in node.children:
-                next_pos = (r, c - 1) if is_horizontal else (r - 1, c)
-                # Bounds check before recursion
-                if 0 <= next_pos[0] < board.size and 0 <= next_pos[1] < board.size:
-                    self._extend_from_position(rack, node.children[existing_tile.letter], placed, next_pos, board, is_horizontal, moves, original_rack)
+        # The following branch previously called an undefined helper and was unreachable
+        # because the previous `elif` covers the same condition. It has been removed
+        # to prevent confusion and unnecessary checks.
 
-    def _extend_forward(self, rack, node, placed, pos, board, is_horizontal, moves, original_rack):
+    def _extend_forward(self, rack, node, placed, pos, board, is_horizontal, moves, original_rack, max_moves):
         """Extends moves forward from the break character position."""
         r, c = pos
         
         # Check if current placement forms a valid word
         if node.is_terminal and placed:
-            self._try_add_move(placed, board, is_horizontal, moves, original_rack)
+            self._try_add_move(placed, board, is_horizontal, moves, original_rack, max_moves)
         
         # Safety check for board boundaries
         if not (0 <= r < board.size and 0 <= c < board.size):
             return
         
         # If current position is empty, try placing tiles
+        if max_moves is not None and len(moves) >= max_moves:
+            return
         if board.is_empty(r, c):
             # Use range instead of enumerate to avoid modification during iteration
             for i in range(len(rack)):
@@ -278,29 +261,32 @@ class Gaddag:
                             new_rack = rack[:i] + rack[i+1:]
                             new_placed = placed + [(char, (r, c))]
                             next_pos = (r, c + 1) if is_horizontal else (r + 1, c)
-                            self._extend_forward(new_rack, node.children[char], new_placed, next_pos, board, is_horizontal, moves, original_rack)
+                            self._extend_forward(new_rack, node.children[char], new_placed, next_pos, board, is_horizontal, moves, original_rack, max_moves)
                 else:
                     if letter in node.children:
                         new_rack = rack[:i] + rack[i+1:]
                         new_placed = placed + [(letter, (r, c))]
                         next_pos = (r, c + 1) if is_horizontal else (r + 1, c)
-                        self._extend_forward(new_rack, node.children[letter], new_placed, next_pos, board, is_horizontal, moves, original_rack)
+                        self._extend_forward(new_rack, node.children[letter], new_placed, next_pos, board, is_horizontal, moves, original_rack, max_moves)
         
         # If there's a tile on the board, use it to continue
         elif not board.is_empty(r, c):
             existing_tile = board.get_tile(r, c)
             if existing_tile and existing_tile.letter in node.children:
                 next_pos = (r, c + 1) if is_horizontal else (r + 1, c)
-                self._extend_forward(rack, node.children[existing_tile.letter], placed, next_pos, board, is_horizontal, moves, original_rack)
+                self._extend_forward(rack, node.children[existing_tile.letter], placed, next_pos, board, is_horizontal, moves, original_rack, max_moves)
 
 
-    def _try_add_move(self, placed_tiles, board, is_horizontal, moves, original_rack):
+    def _try_add_move(self, placed_tiles, board, is_horizontal, moves, original_rack, max_moves):
         """Attempts to add a valid move to the moves set with early rack validation."""
         
         try:
             if not placed_tiles:
                 return
             
+            if max_moves is not None and len(moves) >= max_moves:
+                return
+
             # EARLY VALIDATION: Check rack compatibility first
             from collections import Counter
             rack_counts = Counter(original_rack)
@@ -422,24 +408,25 @@ class Gaddag:
             return False
 
     # Legacy method names for compatibility
-    def _generate_moves_from_anchor(self, rack, board, r, c, moves):
+    def _generate_moves_from_anchor(self, rack, board, r, c, moves, max_moves=None):
         """Legacy method for backward compatibility."""
         rack_str = "".join([tile.letter for tile in rack])
-        self._gen(rack_str, self.root, [], board, r, c, True, moves)
-        self._gen(rack_str, self.root, [], board, r, c, False, moves)
+        self._gen(rack_str, self.root, [], board, r, c, True, moves, rack_str, max_moves)
+        self._gen(rack_str, self.root, [], board, r, c, False, moves, rack_str, max_moves)
 
-    def _extend_right(self, rack, node, placed, pos, board, moves, is_horizontal):
+    def _extend_right(self, rack, node, placed, pos, board, moves, is_horizontal, max_moves=None):
         """Legacy method for backward compatibility."""
-        self._extend_forward(rack, node, placed, pos, board, is_horizontal, moves)
+        rack_str = "".join([tile.letter for tile in rack]) if isinstance(rack, list) else rack
+        self._extend_forward(rack_str, node, placed, pos, board, is_horizontal, moves, rack_str, max_moves)
 
     def _extend_left(self, rack, node, placed, anchor_pos, board, moves, is_horizontal):
         """Legacy method for backward compatibility."""
         # This is a simplified version - the full implementation would be more complex
         pass
 
-    def _validate_and_add_move(self, placed_tiles, board, is_horizontal, moves):
+    def _validate_and_add_move(self, placed_tiles, board, is_horizontal, moves, original_rack, max_moves=None):
         """Legacy method for backward compatibility."""
-        self._try_add_move(placed_tiles, board, is_horizontal, moves)
+        self._try_add_move(placed_tiles, board, is_horizontal, moves, original_rack, max_moves)
         
     def debug_rack_usage(self, rack_str, placed_tiles):
         """Debug method to check rack usage."""
