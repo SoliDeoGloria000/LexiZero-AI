@@ -163,8 +163,21 @@ def pomcts_search(game: ScrabbleGame, network: LexiZeroNet, gaddag: Gaddag, num_
 
         # --- Step 1: Selection ---
         while not node.is_leaf():
-            action, node = node.select_child()
-            sim_game.play_move(action) # Update the simulation game state
+            # Select the next action and corresponding child node
+            action, next_node = node.select_child()
+            try:
+                # Attempt to apply the move to the simulation game state
+                sim_game.play_move(action)
+            except Exception:
+                # If the move is invalid (e.g., uses tiles not in rack),
+                # remove this child from consideration and retry selection.
+                del node.children[action]
+                if not node.children:
+                    # No valid moves remain from this node
+                    break
+                continue
+            # Move was successful; advance to the child node
+            node = next_node
             search_path.append(node)
 
         # --- Step 2: Expansion & Evaluation ---
